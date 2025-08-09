@@ -1,0 +1,285 @@
+
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>GPTW Snake</title>
+<style>
+  html, body {
+    height: 100%;
+    margin: 0;
+    background: #11131C;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    font-family: 'Inter', Arial, sans-serif;
+    color: #FF1628;
+    user-select: none;
+  }
+  #container {
+    display: flex;
+    gap: 24px;
+    align-items: flex-start;
+  }
+  canvas {
+    background: #22262D;
+    border-radius: 10px;
+    box-shadow: 0 0 20px #FF1628AA;
+  }
+  #ui {
+    width: 300px;
+  }
+  h1 {
+    margin: 0 0 12px 0;
+    color: #FF1628;
+    font-weight: 700;
+  }
+  .stat {
+    margin: 8px 0;
+    padding: 8px 12px;
+    background: rgba(255, 22, 40, 0.1);
+    border-radius: 6px;
+    font-weight: 600;
+  }
+  #words {
+    margin-top: 12px;
+    font-weight: 600;
+    color: #FF1628;
+  }
+  button {
+    margin-top: 16px;
+    background: #FF1628;
+    border: none;
+    padding: 10px 16px;
+    border-radius: 6px;
+    font-weight: 700;
+    cursor: pointer;
+    color: #FFFFFF;
+    transition: background-color 0.3s ease;
+  }
+  button:hover {
+    background: #CC1120;
+    color: #FFFFFF;
+  }
+</style>
+</head>
+<body>
+<div id="container">
+  <canvas id="game" width="720" height="720"></canvas>
+  <div id="ui">
+    <h1>GPTW Snake</h1>
+    <div class="stat">Level: <span id="level">1</span></div>
+    <div class="stat">Score (letters collected): <span id="score">0</span></div>
+    <div class="stat">Snake Length: <span id="length">3</span></div>
+    <div class="stat" id="words"></div>
+    <button id="restart">Restart Game</button>
+  </div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const GRID = 36;
+  const CELL = 20;
+  const brandColors = [
+    '#FF1628', '#CC1120', '#AA0E1C', '#880B18', '#660814'
+  ];
+
+  const wordsList = [
+    'TRUST', 'PRIDE', 'RESPECT', 'FAIRNESS', 'BELONGING',
+    'WELLBEING', 'INCLUSION', 'TRANSPARENCY', 'GROWTH', 'IMPACT'
+  ];
+
+  let level = 1;
+  let snake = [];
+  let direction = {x: 1, y: 0};
+  let nextDirection = {x: 1, y: 0};
+  let letters = [];
+  let score = 0;
+  let baseSpeed = 200;
+  let intervalId = null;
+  let gameOver = false;
+
+  const levelEl = document.getElementById('level');
+  const scoreEl = document.getElementById('score');
+  const lengthEl = document.getElementById('length');
+  const wordsEl = document.getElementById('words');
+  const restartBtn = document.getElementById('restart');
+
+  function getSpeed(level) {
+    return Math.max(50, baseSpeed - (level - 1) * 10);
+  }
+
+  function init() {
+    snake = [
+      {x: Math.floor(GRID / 2), y: Math.floor(GRID / 2)},
+      {x: Math.floor(GRID / 2) - 1, y: Math.floor(GRID / 2)},
+      {x: Math.floor(GRID / 2) - 2, y: Math.floor(GRID / 2)}
+    ];
+    direction = {x: 1, y: 0};
+    nextDirection = {x: 1, y: 0};
+    letters = [];
+    score = 0;
+    level = 1;
+    gameOver = false;
+    placeLettersForLevel();
+    updateUI();
+    if (intervalId) clearInterval(intervalId);
+    intervalId = setInterval(gameLoop, getSpeed(level));
+  }
+
+  function placeLettersForLevel() {
+    letters = [];
+    const activeWords = wordsList.slice(0, level);
+    let lettersToPlace = [];
+    activeWords.forEach(w => lettersToPlace = lettersToPlace.concat(w.split('')));
+    lettersToPlace = shuffleArray(lettersToPlace);
+
+    for (const ch of lettersToPlace) {
+      let placed = false;
+      for (let i = 0; i < 300 && !placed; i++) {
+        const x = Math.floor(Math.random() * GRID);
+        const y = Math.floor(Math.random() * GRID);
+        if (snake.some(s => s.x === x && s.y === y)) continue;
+        if (letters.some(l => l.x === x && l.y === y)) continue;
+        letters.push({x, y, char: ch});
+        placed = true;
+      }
+    }
+  }
+
+  function shuffleArray(arr) {
+    for(let i=arr.length-1; i>0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [arr[i], arr[j]] = [arr[j], arr[i]];
+    }
+    return arr;
+  }
+
+  function gameLoop() {
+    if (gameOver) return;
+
+    if (!(nextDirection.x === -direction.x && nextDirection.y === -direction.y)) {
+      direction = nextDirection;
+    }
+
+    let newX = snake[0].x + direction.x;
+    let newY = snake[0].y + direction.y;
+    if (newX < 0) newX = GRID - 1;
+    else if (newX >= GRID) newX = 0;
+    if (newY < 0) newY = GRID - 1;
+    else if (newY >= GRID) newY = 0;
+
+    if (snake.some(seg => seg.x === newX && seg.y === newY)) {
+      endGame();
+      return;
+    }
+
+    snake.unshift({x: newX, y: newY});
+
+    const letterIndex = letters.findIndex(l => l.x === newX && l.y === newY);
+    if (letterIndex !== -1) {
+      letters.splice(letterIndex, 1);
+      score++;
+      if (letters.length === 0) {
+        levelUp();
+      }
+    } else {
+      snake.pop();
+    }
+
+    updateUI();
+    draw();
+  }
+
+  function levelUp() {
+    if (level < wordsList.length) {
+      level++;
+      placeLettersForLevel();
+      if (intervalId) clearInterval(intervalId);
+      intervalId = setInterval(gameLoop, getSpeed(level));
+    } else {
+      alert('🎉 You collected all GPTW words! Great job! 🎉');
+      gameOver = true;
+      clearInterval(intervalId);
+    }
+  }
+
+  function endGame() {
+    gameOver = true;
+    clearInterval(intervalId);
+    setTimeout(() => {
+      if (confirm('Game Over! Restart?')) {
+        init();
+      }
+    }, 100);
+  }
+
+  function updateUI() {
+    levelEl.textContent = level;
+    scoreEl.textContent = score;
+    lengthEl.textContent = snake.length;
+    wordsEl.textContent = 'Words this level: ' + wordsList.slice(0, level).join(', ');
+  }
+
+  function draw() {
+    ctx.fillStyle = '#22262D';
+    ctx.fillRect(0, 0, canvas.width, canvas.height);
+
+    ctx.strokeStyle = '#DEE5E4';
+    for (let i = 0; i <= GRID; i++) {
+      ctx.beginPath();
+      ctx.moveTo(i * CELL, 0);
+      ctx.lineTo(i * CELL, canvas.height);
+      ctx.stroke();
+
+      ctx.beginPath();
+      ctx.moveTo(0, i * CELL);
+      ctx.lineTo(canvas.width, i * CELL);
+      ctx.stroke();
+    }
+
+    ctx.font = 'bold 18px monospace';
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    for (const l of letters) {
+      ctx.fillStyle = '#FF1628';
+      ctx.fillRect(l.x * CELL + 2, l.y * CELL + 2, CELL - 4, CELL - 4);
+      ctx.fillStyle = '#FFFFFF';
+      ctx.fillText(l.char, l.x * CELL + CELL / 2, l.y * CELL + CELL / 2);
+    }
+
+    snake.forEach((segment, i) => {
+      ctx.fillStyle = brandColors[i % brandColors.length];
+      ctx.fillRect(segment.x * CELL, segment.y * CELL, CELL, CELL);
+      if(i === 0) {
+        ctx.fillStyle = '#FFFFFF';
+        const eyeRadius = 3;
+        const offsetX = segment.x * CELL + CELL / 3;
+        const offsetY = segment.y * CELL + CELL / 3;
+        ctx.beginPath();
+        ctx.arc(offsetX, offsetY, eyeRadius, 0, Math.PI * 2);
+        ctx.arc(offsetX + 6, offsetY, eyeRadius, 0, Math.PI * 2);
+        ctx.fill();
+      }
+    });
+  }
+
+  window.addEventListener('keydown', e => {
+    const key = e.key.toLowerCase();
+    if ((key === 'arrowup' || key === 'w') && direction.y !== 1) nextDirection = {x: 0, y: -1};
+    else if ((key === 'arrowdown' || key === 's') && direction.y !== -1) nextDirection = {x: 0, y: 1};
+    else if ((key === 'arrowleft' || key === 'a') && direction.x !== 1) nextDirection = {x: -1, y: 0};
+    else if ((key === 'arrowright' || key === 'd') && direction.x !== -1) nextDirection = {x: 1, y: 0};
+    else if (key === 'r') init();
+  });
+
+  restartBtn.addEventListener('click', () => init());
+
+  init();
+})();
+</script>
+</body>
+</html>
